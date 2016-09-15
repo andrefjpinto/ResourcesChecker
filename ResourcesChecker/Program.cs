@@ -128,13 +128,7 @@ namespace ResourcesChecker
         {
             if (Directory.Exists(SourcePath))
             {
-                //var watch = System.Diagnostics.Stopwatch.StartNew();
-
                 ProcessRepository(SourcePath);
-
-                //watch.Stop();
-
-                //Console.WriteLine($"Repository {_sourcesFiles.Count} files and {_resources.Count} resources in {watch.ElapsedMilliseconds} ms.");
             }
 
             Console.WriteLine("Resources:\t Loaded");
@@ -158,7 +152,6 @@ namespace ResourcesChecker
         {
             using (var repo = new Repository(repositoryPath))
             {
-                //List<String> paths = new List<string>();
                 RecursivelyGetPaths(_repositoryFiles, repo.Head.Tip.Tree);
             }
         }
@@ -169,7 +162,6 @@ namespace ResourcesChecker
             {
                 if (!te.Path.EndsWith(".generated.cs") && (te.Path.EndsWith(".cs") || te.Path.EndsWith(".cshtml") || te.Path.EndsWith(".js")))
                 {
-                    
                         string filepath = $"{SourcePath}\\{te.Path}";
                         //Console.WriteLine($"Loading file: {filepath}");
                         
@@ -181,7 +173,6 @@ namespace ResourcesChecker
                             IsJavascript = te.Path.EndsWith(".js"),
                             Content = fileContent
                         });
-                    
                 }
 
                 if (te.TargetType == TreeEntryTargetType.Tree)
