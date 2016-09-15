@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using LibGit2Sharp;
 using MAB.DotIgnore;
 using Newtonsoft.Json;
 using ResourcesChecker.Models;
@@ -13,14 +14,15 @@ namespace ResourcesChecker
     public static class Program
     {
         #region Configuration
-        private const string SourcePath = @"C:\dev\git\DPG.Ecommerce";
-        private const string IgnoreFile = @"C:\dev\git\DPG.Ecommerce\.gitignore";
-        private const string ResourcesFile = @"C:\dev\git\DPG.Ecommerce\Source\DPG.Ecommerce.Resources\Resource-en-GB.json";
+        private const string SourcePath = @"d:\dev\git\DPG.Ecommerce";
+        private const string IgnoreFile = @"d:\dev\git\DPG.Ecommerce\.gitignore";
+        private const string ResourcesFile = @"d:\dev\git\DPG.Ecommerce\Source\DPG.Ecommerce.Resources\Resource-en-GB.json";
         private const string ResultsFileName = "results.csv";
         private const int NumberOfThreads = 4;
         #endregion
 
-        private static List<string> _sourcesFiles;
+        //private static List<string> _sourcesFiles;
+        private static List<string> _repositoryFiles;
         private static IgnoreList _ignores;
         private static List<Resource> _resources;
         private static Dictionary<string, int> _threadsInfo;
@@ -31,14 +33,15 @@ namespace ResourcesChecker
         public static void Main(string[] args)
         {
             var watch = System.Diagnostics.Stopwatch.StartNew();
-            
+
             _ignores = new IgnoreList(IgnoreFile);
-            _sourcesFiles = new List<string>();
+            //_sourcesFiles = new List<string>();
+            _repositoryFiles = new List<string>();
             _resources = new List<Resource>();
             _threadsInfo = new Dictionary<string, int>();
             _threadList = new List<Task>();
 
-            LoadSourceFiles();
+            LoadRepositoryFiles();
             LoadResources();
             
             CheckResources();
@@ -50,8 +53,8 @@ namespace ResourcesChecker
             SaveResult();
 
             watch.Stop();
-
-            Console.WriteLine($"Analyzed {_sourcesFiles.Count} files and {_resources.Count} resources in {watch.ElapsedMilliseconds} ms.");
+            
+            Console.WriteLine($"Analyzed {_repositoryFiles.Count} files and {_resources.Count} resources in {watch.ElapsedMilliseconds} ms.");
             Console.WriteLine($"Unused resources list saved in {Directory.GetCurrentDirectory()}\\{ResultsFileName}");
         }
 
@@ -63,22 +66,22 @@ namespace ResourcesChecker
         {
             var auxStart = 0;
 
-            _threadsInfo.Add("thread0", _sourcesFiles.Count % NumberOfThreads + _sourcesFiles.Count / NumberOfThreads);
+            _threadsInfo.Add("thread0", _repositoryFiles.Count % NumberOfThreads + _repositoryFiles.Count / NumberOfThreads);
 
             for (var i = 1; i < NumberOfThreads; i++)
             {
-                _threadsInfo.Add($"thread{i}", _sourcesFiles.Count / NumberOfThreads);
+                _threadsInfo.Add($"thread{i}", _repositoryFiles.Count / NumberOfThreads);
             }
 
             foreach (var threadInfo in _threadsInfo)
             {
-                if (auxStart < _sourcesFiles.Count)
+                if (auxStart < _repositoryFiles.Count)
                 {
                     var sdfsd = auxStart;
 
                     _threadList.Add(
                         Task.Factory.StartNew(
-                            () => FindUnusedResources(_sourcesFiles.GetRange(sdfsd, threadInfo.Value))));
+                            () => FindUnusedResources(_repositoryFiles.GetRange(sdfsd, threadInfo.Value))));
                 }
                 auxStart += threadInfo.Value;
             }
@@ -102,7 +105,9 @@ namespace ResourcesChecker
         {
             foreach (var filesSource in sourceFiles)
             {
-                var file = File.ReadAllText(filesSource);
+                string filepath = "{0}\\{1}";
+
+                var file = File.ReadAllText(string.Format(filepath, SourcePath ,filesSource));
 
                 foreach (var resource in _resources.Where(x => x.Matches == 0))
                 {
@@ -123,15 +128,20 @@ namespace ResourcesChecker
                 }
 
                 ProcessedFiles++;
-                //Console.WriteLine($"Processed Files: {ProcessedFiles} of {_sourcesFiles.Count}. Thread ID: {Thread.CurrentThread.ManagedThreadId}");
             }
         }
 
-        private static void LoadSourceFiles()
+        private static void LoadRepositoryFiles()
         {
             if (Directory.Exists(SourcePath))
             {
-                ProcessDirectory(SourcePath);
+                //var watch = System.Diagnostics.Stopwatch.StartNew();
+
+                ProcessRepository(SourcePath);
+
+                //watch.Stop();
+
+                //Console.WriteLine($"Repository {_sourcesFiles.Count} files and {_resources.Count} resources in {watch.ElapsedMilliseconds} ms.");
             }
 
             Console.WriteLine("Resources:\t Loaded");
@@ -148,31 +158,31 @@ namespace ResourcesChecker
             Console.WriteLine("Source Files:\t Loaded");
         }
 
+
         // Process all files in the directory passed in, recurse on any directories 
         // that are found, and process the files they contain.
-        private static void ProcessDirectory(string targetDirectory)
+        private static void ProcessRepository(string repositoryPath)
         {
-            // Process the list of files found in the directory.
-            string[] fileEntries = Directory.GetFiles(targetDirectory);
-            foreach (string fileName in fileEntries)
-                ProcessFile(fileName);
-
-            // Recurse into subdirectories of this directory.
-            string[] subdirectoryEntries = Directory.GetDirectories(targetDirectory);
-
-            // Validates if directory isn't in the ignore list
-            foreach (string subdirectory in subdirectoryEntries)
+            using (var repo = new Repository(repositoryPath))
             {
-                if (!_ignores.IsIgnored(new DirectoryInfo(subdirectory)))
-                    ProcessDirectory(subdirectory);
+                //List<String> paths = new List<string>();
+                RecursivelyGetPaths(_repositoryFiles, repo.Head.Tip.Tree);
             }
         }
 
-        private static void ProcessFile(string path)
+        private static void RecursivelyGetPaths(List<String> paths, Tree tree)
         {
-            if (!path.EndsWith(".generated.cs") && (path.EndsWith(".cs") || path.EndsWith(".cshtml") || path.EndsWith(".js")))
+            foreach (TreeEntry te in tree)
             {
-                _sourcesFiles.Add(path);
+                if (!te.Path.EndsWith(".generated.cs") && (te.Path.EndsWith(".cs") || te.Path.EndsWith(".cshtml") || te.Path.EndsWith(".js")))
+                {
+                    paths.Add(te.Path);
+                }
+                
+                if (te.TargetType == TreeEntryTargetType.Tree)
+                {
+                    RecursivelyGetPaths(paths, te.Target as Tree);
+                }
             }
         }
     }
