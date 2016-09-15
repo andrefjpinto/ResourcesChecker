@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using LibGit2Sharp;
@@ -60,73 +61,66 @@ namespace ResourcesChecker
         /// </summary>
         private static void CheckResources()
         {
-            var auxStart = 0;
-
-            _threadsInfo.Add("thread0", _repositoryFiles.Count % NumberOfThreads + _repositoryFiles.Count / NumberOfThreads);
-
-            for (var i = 1; i < NumberOfThreads; i++)
-            {
-                _threadsInfo.Add($"thread{i}", _repositoryFiles.Count / NumberOfThreads);
-            }
-
-            foreach (var threadInfo in _threadsInfo)
-            {
-                if (auxStart < _repositoryFiles.Count)
-                {
-                    var aux = auxStart;
-
-                    _threadList.Add(
-                        Task.Factory.StartNew(
-                            () => FindUnusedResources(_repositoryFiles.GetRange(aux, threadInfo.Value))));
-                }
-                auxStart += threadInfo.Value;
-            }
+            Parallel.ForEach(_repositoryFiles, ProcessFile);
         }
 
         private static void SaveResult()
         {
+
+            StringBuilder sb = new StringBuilder();
+
             StreamWriter resultsfile;
             using (resultsfile = new StreamWriter(ResultsFileName))
             {
-                foreach (var source in _resources.Where(x => x.Matches == 0))
+
+                var resourceList = _resources.Where(x => x.Matches == 0);
+
+                foreach (var source in resourceList)
                 {
-                    resultsfile.WriteLine(source.Type + ", " + source.Name);
+                    sb.AppendLine($"{source.Type}, {source.Name}");
                 }
+
+                resultsfile.Write(sb.ToString());
 
                 resultsfile.Close();
             }
         }
 
-        private static void FindUnusedResources(IEnumerable<FilePath> sourceFiles)
+        private static void ProcessFile(FilePath filesSource)
         {
-            foreach (var filesSource in sourceFiles)
+            var file = filesSource.Content;
+
+            var resourceList = _resources.Where(x => x.Matches == 0);
+
+            foreach (var resource in resourceList)
             {
-                var file = filesSource.Content;
+                var matches = 0;
 
-                foreach (var resource in _resources.Where(x => x.Matches == 0))
+                if (!filesSource.IsJavascript)
                 {
-                    var matches = 0;
-                    if (!filesSource.IsJavascript)
-                    {
-                        var expression = $"{resource.Type}ResourceDictionary.{resource.Name}";
+                    //var defaultRegex = new Regex($"{resource.Type}ResourceDictionary.{resource.Name}", RegexOptions.IgnoreCase);
+                    //matches = defaultRegex.Matches(file).Count;
 
-                        matches = file.IndexOf(expression, StringComparison.InvariantCultureIgnoreCase) > -1 ? 1 : 0;
-                    }
-                    else if (filesSource.IsJavascript)
-                    {
-                        matches = (
-                            file.IndexOf($"\"{resource.Type}\", \"{resource.Name}\"", StringComparison.InvariantCultureIgnoreCase) > -1 ||
-                            file.IndexOf($"\"{resource.Type}\",\"{resource.Name}\"", StringComparison.InvariantCultureIgnoreCase) > -1 ||
-                            file.IndexOf($"'{resource.Type}', '{resource.Name}'", StringComparison.InvariantCultureIgnoreCase) > -1 ||
-                            file.IndexOf($"'{resource.Type}','{resource.Name}'", StringComparison.InvariantCultureIgnoreCase) > -1
-                            ) ? 1 : 0;
-                    }
+                    matches = file.IndexOf($"{resource.Type}ResourceDictionary.{resource.Name}", StringComparison.OrdinalIgnoreCase) > -1 ? 1 : 0;
+                }
+                else if (filesSource.IsJavascript)
+                {
+                    //var jsRegex = new Regex($"([\"\']){resource.Type}([\"\'])(^|, ?)([\"\']){resource.Name}([\"\'])",
+                    //    RegexOptions.IgnoreCase);
+                    //matches = jsRegex.Matches(file).Count;
 
-                    resource.Matches += matches;
+                    matches = (
+                        file.IndexOf($"\"{resource.Type}\", \"{resource.Name}\"", StringComparison.OrdinalIgnoreCase) > -1 ||
+                        file.IndexOf($"\"{resource.Type}\",\"{resource.Name}\"", StringComparison.OrdinalIgnoreCase) > -1 ||
+                        file.IndexOf($"'{resource.Type}', '{resource.Name}'", StringComparison.OrdinalIgnoreCase) > -1 ||
+                        file.IndexOf($"'{resource.Type}','{resource.Name}'", StringComparison.OrdinalIgnoreCase) > -1
+                        ) ? 1 : 0;
                 }
 
-                ProcessedFiles++;
+                resource.Matches += matches;
             }
+
+            ProcessedFiles++;
         }
 
         private static void LoadRepositoryFiles()
@@ -168,15 +162,12 @@ namespace ResourcesChecker
                 if (!te.Path.EndsWith(".generated.cs") && (te.Path.EndsWith(".cs") || te.Path.EndsWith(".cshtml") || te.Path.EndsWith(".js")))
                 {
                         string filepath = $"{SourcePath}\\{te.Path}";
-                        //Console.WriteLine($"Loading file: {filepath}");
-                        
-                        var fileContent = File.ReadAllText(filepath);
 
                         paths.Add(new FilePath()
                         {
                             Path = te.Path,
                             IsJavascript = te.Path.EndsWith(".js"),
-                            Content = fileContent
+                            Content = File.ReadAllText(filepath)
                         });
                 }
 
