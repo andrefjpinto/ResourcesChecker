@@ -61,7 +61,6 @@ namespace ResourcesChecker
         /// <summary>
         /// Creates threads and divides source files between threads
         /// </summary>
-        /// <param name="auxStart"></param>
         private static void CheckResources()
         {
             var auxStart = 0;
@@ -77,11 +76,11 @@ namespace ResourcesChecker
             {
                 if (auxStart < _repositoryFiles.Count)
                 {
-                    var sdfsd = auxStart;
+                    var aux = auxStart;
 
                     _threadList.Add(
                         Task.Factory.StartNew(
-                            () => FindUnusedResources(_repositoryFiles.GetRange(sdfsd, threadInfo.Value))));
+                            () => FindUnusedResources(_repositoryFiles.GetRange(aux, threadInfo.Value))));
                 }
                 auxStart += threadInfo.Value;
             }
@@ -105,7 +104,7 @@ namespace ResourcesChecker
         {
             foreach (var filesSource in sourceFiles)
             {
-                string filepath = "{0}\\{1}";
+                const string filepath = "{0}\\{1}";
 
                 var file = File.ReadAllText(string.Format(filepath, SourcePath ,filesSource));
 
