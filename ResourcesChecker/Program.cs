@@ -108,13 +108,18 @@ namespace ResourcesChecker
                     var matches = 0;
                     if (!filesSource.IsJavascript)
                     {
-                        var defaultRegex = new Regex($"{resource.Type}ResourceDictionary.{resource.Name}", RegexOptions.IgnoreCase);
-                        matches = defaultRegex.Matches(file).Count;
+                        var expression = $"{resource.Type}ResourceDictionary.{resource.Name}";
+
+                        matches = file.IndexOf(expression, StringComparison.InvariantCultureIgnoreCase) > -1 ? 1 : 0;
                     }
                     else if (filesSource.IsJavascript)
                     {
-                        var jsRegex = new Regex($"([\"\']){resource.Type}([\"\'])(^|, ?)([\"\']){resource.Name}([\"\'])", RegexOptions.IgnoreCase);
-                        matches = jsRegex.Matches(file).Count;
+                        matches = (
+                            file.IndexOf($"\"{resource.Type}\", \"{resource.Name}\"", StringComparison.InvariantCultureIgnoreCase) > -1 ||
+                            file.IndexOf($"\"{resource.Type}\",\"{resource.Name}\"", StringComparison.InvariantCultureIgnoreCase) > -1 ||
+                            file.IndexOf($"'{resource.Type}', '{resource.Name}'", StringComparison.InvariantCultureIgnoreCase) > -1 ||
+                            file.IndexOf($"'{resource.Type}','{resource.Name}'", StringComparison.InvariantCultureIgnoreCase) > -1
+                            ) ? 1 : 0;
                     }
 
                     resource.Matches += matches;
