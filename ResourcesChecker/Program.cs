@@ -17,7 +17,7 @@ namespace ResourcesChecker
         private const string IgnoreFile = @"C:\dev\git\DPG.Ecommerce\.gitignore";
         private const string ResourcesFile = @"C:\dev\git\DPG.Ecommerce\Source\DPG.Ecommerce.Resources\Resource-en-GB.json";
         private const string ResultsFileName = "results.csv";
-        private const int NumberOfThreads = 5;
+        private const int NumberOfThreads = 4;
         #endregion
 
         private static List<string> _sourcesFiles;
@@ -30,6 +30,8 @@ namespace ResourcesChecker
 
         public static void Main(string[] args)
         {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            
             _ignores = new IgnoreList(IgnoreFile);
             _sourcesFiles = new List<string>();
             _resources = new List<Resource>();
@@ -38,18 +40,16 @@ namespace ResourcesChecker
 
             LoadSourceFiles();
             LoadResources();
-
-            var watch = System.Diagnostics.Stopwatch.StartNew();
-
+            
             CheckResources();
 
             Console.WriteLine("Checking files...");
 
             Task.WaitAll(_threadList.ToArray());
 
-            watch.Stop();
-
             SaveResult();
+
+            watch.Stop();
 
             Console.WriteLine($"Analyzed {_sourcesFiles.Count} files and {_resources.Count} resources in {watch.ElapsedMilliseconds} ms.");
             Console.WriteLine($"Unused resources list saved in {Directory.GetCurrentDirectory()}\\{ResultsFileName}");
