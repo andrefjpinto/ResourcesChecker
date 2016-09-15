@@ -14,16 +14,13 @@ namespace ResourcesChecker
     public static class Program
     {
         #region Configuration
-        private const string SourcePath = @"d:\dev\git\DPG.Ecommerce";
-        private const string IgnoreFile = @"d:\dev\git\DPG.Ecommerce\.gitignore";
-        private const string ResourcesFile = @"d:\dev\git\DPG.Ecommerce\Source\DPG.Ecommerce.Resources\Resource-en-GB.json";
+        private const string SourcePath = @"z:\dev\git\DPG.Ecommerce";
+        private const string ResourcesFile = @"z:\dev\git\DPG.Ecommerce\Source\DPG.Ecommerce.Resources\Resource-en-GB.json";
         private const string ResultsFileName = "results.csv";
-        private const int NumberOfThreads = 4;
+        private const int NumberOfThreads = 8;
         #endregion
 
-        //private static List<string> _sourcesFiles;
-        private static List<string> _repositoryFiles;
-        private static IgnoreList _ignores;
+        private static List<FilePath> _repositoryFiles;
         private static List<Resource> _resources;
         private static Dictionary<string, int> _threadsInfo;
         private static List<Task> _threadList;
@@ -33,17 +30,17 @@ namespace ResourcesChecker
         public static void Main(string[] args)
         {
             var watch = System.Diagnostics.Stopwatch.StartNew();
-
-            _ignores = new IgnoreList(IgnoreFile);
-            //_sourcesFiles = new List<string>();
-            _repositoryFiles = new List<string>();
+            
+            _repositoryFiles = new List<FilePath>();
             _resources = new List<Resource>();
             _threadsInfo = new Dictionary<string, int>();
             _threadList = new List<Task>();
 
             LoadRepositoryFiles();
+            Console.WriteLine($"Loaded {_repositoryFiles.Count} Repository files in {watch.ElapsedMilliseconds} ms.");
             LoadResources();
-            
+            Console.WriteLine($"Loaded {_resources.Count} Resources in {watch.ElapsedMilliseconds} ms.");
+
             CheckResources();
 
             Console.WriteLine("Checking files...");
@@ -100,24 +97,25 @@ namespace ResourcesChecker
             }
         }
 
-        private static void FindUnusedResources(IEnumerable<string> sourceFiles)
+        private static void FindUnusedResources(IEnumerable<FilePath> sourceFiles)
         {
             foreach (var filesSource in sourceFiles)
             {
-                const string filepath = "{0}\\{1}";
+                string filepath = $"{SourcePath}\\{filesSource.Path}";
 
-                var file = File.ReadAllText(string.Format(filepath, SourcePath ,filesSource));
+                var file = File.ReadAllText(filepath);
 
                 foreach (var resource in _resources.Where(x => x.Matches == 0))
                 {
                     var matches = 0;
-
-                    if (filesSource.EndsWith(".cs") || filesSource.EndsWith(".cshtml"))
+                    if (!filesSource.IsJavascript)
+                    //if (filesSource.Path.EndsWith(".cs") || filesSource.Path.EndsWith(".cshtml"))
                     {
                         var defaultRegex = new Regex($"{resource.Type}ResourceDictionary.{resource.Name}", RegexOptions.IgnoreCase);
                         matches = defaultRegex.Matches(file).Count;
                     }
-                    else if (filesSource.EndsWith(".js"))
+                    //else if (filesSource.Path.EndsWith(".js"))
+                    else if (filesSource.IsJavascript)
                     {
                         var jsRegex = new Regex($"([\"\']){resource.Type}([\"\'])(^|, ?)([\"\']){resource.Name}([\"\'])", RegexOptions.IgnoreCase);
                         matches = jsRegex.Matches(file).Count;
@@ -169,15 +167,28 @@ namespace ResourcesChecker
             }
         }
 
-        private static void RecursivelyGetPaths(List<String> paths, Tree tree)
+        private static void RecursivelyGetPaths(List<FilePath> paths, Tree tree)
         {
             foreach (TreeEntry te in tree)
             {
                 if (!te.Path.EndsWith(".generated.cs") && (te.Path.EndsWith(".cs") || te.Path.EndsWith(".cshtml") || te.Path.EndsWith(".js")))
                 {
-                    paths.Add(te.Path);
+                    
+                        //string filepath = $"{SourcePath}\\{te.Path}";
+                        //Console.WriteLine($"Loading file: {filepath}");
+
+                        var fileContent = string.Empty;
+                        //var fileContent = File.ReadAllText(filepath);
+
+                        paths.Add(new FilePath()
+                        {
+                            Path = te.Path,
+                            IsJavascript = te.Path.EndsWith(".js"),
+                            Content = fileContent
+                        });
+                    
                 }
-                
+
                 if (te.TargetType == TreeEntryTargetType.Tree)
                 {
                     RecursivelyGetPaths(paths, te.Target as Tree);
