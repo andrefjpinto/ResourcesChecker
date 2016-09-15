@@ -101,20 +101,16 @@ namespace ResourcesChecker
         {
             foreach (var filesSource in sourceFiles)
             {
-                string filepath = $"{SourcePath}\\{filesSource.Path}";
-
-                var file = File.ReadAllText(filepath);
+                var file = filesSource.Content;
 
                 foreach (var resource in _resources.Where(x => x.Matches == 0))
                 {
                     var matches = 0;
                     if (!filesSource.IsJavascript)
-                    //if (filesSource.Path.EndsWith(".cs") || filesSource.Path.EndsWith(".cshtml"))
                     {
                         var defaultRegex = new Regex($"{resource.Type}ResourceDictionary.{resource.Name}", RegexOptions.IgnoreCase);
                         matches = defaultRegex.Matches(file).Count;
                     }
-                    //else if (filesSource.Path.EndsWith(".js"))
                     else if (filesSource.IsJavascript)
                     {
                         var jsRegex = new Regex($"([\"\']){resource.Type}([\"\'])(^|, ?)([\"\']){resource.Name}([\"\'])", RegexOptions.IgnoreCase);
@@ -174,11 +170,10 @@ namespace ResourcesChecker
                 if (!te.Path.EndsWith(".generated.cs") && (te.Path.EndsWith(".cs") || te.Path.EndsWith(".cshtml") || te.Path.EndsWith(".js")))
                 {
                     
-                        //string filepath = $"{SourcePath}\\{te.Path}";
+                        string filepath = $"{SourcePath}\\{te.Path}";
                         //Console.WriteLine($"Loading file: {filepath}");
-
-                        var fileContent = string.Empty;
-                        //var fileContent = File.ReadAllText(filepath);
+                        
+                        var fileContent = File.ReadAllText(filepath);
 
                         paths.Add(new FilePath()
                         {
