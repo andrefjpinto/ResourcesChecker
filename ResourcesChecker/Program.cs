@@ -1,12 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using LibGit2Sharp;
-using MAB.DotIgnore;
 using Newtonsoft.Json;
+using ResourcesChecker.Extensions;
 using ResourcesChecker.Models;
 
 namespace ResourcesChecker
@@ -14,174 +13,82 @@ namespace ResourcesChecker
     public static class Program
     {
         #region Configuration
-        private const string SourcePath = @"d:\dev\git\DPG.Ecommerce";
-        private const string IgnoreFile = @"d:\dev\git\DPG.Ecommerce\.gitignore";
-        private const string ResourcesFile = @"d:\dev\git\DPG.Ecommerce\Source\DPG.Ecommerce.Resources\Resource-en-GB.json";
+        private const string SourcePath = @"c:\dev\git\DPG.Ecommerce";
+        private const string ResourcesFile = @"c:\dev\git\DPG.Ecommerce\Source\DPG.Ecommerce.Resources\Resource-en-GB.json";
         private const string ResultsFileName = "results.csv";
-        private const int NumberOfThreads = 4;
         #endregion
 
-        //private static List<string> _sourcesFiles;
-        private static List<string> _repositoryFiles;
-        private static IgnoreList _ignores;
-        private static List<Resource> _resources;
-        private static Dictionary<string, int> _threadsInfo;
-        private static List<Task> _threadList;
-
-        private static int ProcessedFiles { get; set; }
+        private static Resource[] _resources;
+        private static List<SourceFile> _sourceFiles;
 
         public static void Main(string[] args)
         {
-            var watch = System.Diagnostics.Stopwatch.StartNew();
-
-            _ignores = new IgnoreList(IgnoreFile);
-            //_sourcesFiles = new List<string>();
-            _repositoryFiles = new List<string>();
-            _resources = new List<Resource>();
-            _threadsInfo = new Dictionary<string, int>();
-            _threadList = new List<Task>();
+            var watch = Stopwatch.StartNew();
+            _sourceFiles = new List<SourceFile>();
 
             LoadRepositoryFiles();
             LoadResources();
-            
-            CheckResources();
 
             Console.WriteLine("Checking files...");
-
-            Task.WaitAll(_threadList.ToArray());
+            new BetterSolution(_sourceFiles, _resources).Run();
 
             SaveResult();
-
             watch.Stop();
-            
-            Console.WriteLine($"Analyzed {_repositoryFiles.Count} files and {_resources.Count} resources in {watch.ElapsedMilliseconds} ms.");
+
+            Console.WriteLine($"Analyzed {_sourceFiles.Count} files and {_resources.Length} resources in {watch.ElapsedMilliseconds} ms.");
             Console.WriteLine($"Unused resources list saved in {Directory.GetCurrentDirectory()}\\{ResultsFileName}");
-        }
-
-        /// <summary>
-        /// Creates threads and divides source files between threads
-        /// </summary>
-        private static void CheckResources()
-        {
-            var auxStart = 0;
-
-            _threadsInfo.Add("thread0", _repositoryFiles.Count % NumberOfThreads + _repositoryFiles.Count / NumberOfThreads);
-
-            for (var i = 1; i < NumberOfThreads; i++)
-            {
-                _threadsInfo.Add($"thread{i}", _repositoryFiles.Count / NumberOfThreads);
-            }
-
-            foreach (var threadInfo in _threadsInfo)
-            {
-                if (auxStart < _repositoryFiles.Count)
-                {
-                    var aux = auxStart;
-
-                    _threadList.Add(
-                        Task.Factory.StartNew(
-                            () => FindUnusedResources(_repositoryFiles.GetRange(aux, threadInfo.Value))));
-                }
-                auxStart += threadInfo.Value;
-            }
+            Console.ReadLine();
         }
 
         private static void SaveResult()
         {
-            StreamWriter resultsfile;
-            using (resultsfile = new StreamWriter(ResultsFileName))
-            {
-                foreach (var source in _resources.Where(x => x.Matches == 0))
-                {
-                    resultsfile.WriteLine(source.Type + ", " + source.Name);
-                }
-
-                resultsfile.Close();
-            }
-        }
-
-        private static void FindUnusedResources(IEnumerable<string> sourceFiles)
-        {
-            foreach (var filesSource in sourceFiles)
-            {
-                const string filepath = "{0}\\{1}";
-
-                var file = File.ReadAllText(string.Format(filepath, SourcePath ,filesSource));
-
-                foreach (var resource in _resources.Where(x => x.Matches == 0))
-                {
-                    var matches = 0;
-
-                    if (filesSource.EndsWith(".cs") || filesSource.EndsWith(".cshtml"))
-                    {
-                        var defaultRegex = new Regex($"{resource.Type}ResourceDictionary.{resource.Name}", RegexOptions.IgnoreCase);
-                        matches = defaultRegex.Matches(file).Count;
-                    }
-                    else if (filesSource.EndsWith(".js"))
-                    {
-                        var jsRegex = new Regex($"([\"\']){resource.Type}([\"\'])(^|, ?)([\"\']){resource.Name}([\"\'])", RegexOptions.IgnoreCase);
-                        matches = jsRegex.Matches(file).Count;
-                    }
-
-                    resource.Matches += matches;
-                }
-
-                ProcessedFiles++;
-            }
+            File.WriteAllLines(ResultsFileName, _resources.Where(x => x.Matches == 0).Select(x => x.Type + ", " + x.Name));
         }
 
         private static void LoadRepositoryFiles()
         {
             if (Directory.Exists(SourcePath))
-            {
-                //var watch = System.Diagnostics.Stopwatch.StartNew();
-
                 ProcessRepository(SourcePath);
-
-                //watch.Stop();
-
-                //Console.WriteLine($"Repository {_sourcesFiles.Count} files and {_resources.Count} resources in {watch.ElapsedMilliseconds} ms.");
-            }
 
             Console.WriteLine("Resources:\t Loaded");
         }
 
         private static void LoadResources()
         {
-            using (var r = File.OpenText(ResourcesFile))
-            {
-                var json = r.ReadToEnd();
-                _resources.AddRange(JsonConvert.DeserializeObject<IEnumerable<Resource>>(json));
-            }
+            var jsonFile = File.ReadAllText(ResourcesFile);
+            _resources = JsonConvert.DeserializeObject<Resource[]>(jsonFile);
 
             Console.WriteLine("Source Files:\t Loaded");
         }
 
-
-        // Process all files in the directory passed in, recurse on any directories 
-        // that are found, and process the files they contain.
         private static void ProcessRepository(string repositoryPath)
         {
             using (var repo = new Repository(repositoryPath))
             {
-                //List<String> paths = new List<string>();
-                RecursivelyGetPaths(_repositoryFiles, repo.Head.Tip.Tree);
+                RecursivelyGetPaths(repo.Head.Tip.Tree);
             }
         }
 
-        private static void RecursivelyGetPaths(List<String> paths, Tree tree)
+        private static void RecursivelyGetPaths(Tree tree)
         {
-            foreach (TreeEntry te in tree)
+            foreach (var te in tree)
             {
-                if (!te.Path.EndsWith(".generated.cs") && (te.Path.EndsWith(".cs") || te.Path.EndsWith(".cshtml") || te.Path.EndsWith(".js")))
+                if (te.Path.IsJs())
                 {
-                    paths.Add(te.Path);
+                    _sourceFiles.Add(new SourceFile
+                    {
+                        Source = File.ReadAllText(Path.Combine(SourcePath, te.Path))
+                        .Replace(" ", string.Empty).Replace("'", "\""),
+                        IsJs = true
+                    });
                 }
-                
+                else if (te.Path.IsCshtml() || te.Path.IsCs())
+                {
+                    _sourceFiles.Add(new SourceFile { Source = File.ReadAllText(Path.Combine(SourcePath, te.Path)) });
+                }
+
                 if (te.TargetType == TreeEntryTargetType.Tree)
-                {
-                    RecursivelyGetPaths(paths, te.Target as Tree);
-                }
+                    RecursivelyGetPaths(te.Target as Tree);
             }
         }
     }
