@@ -58,6 +58,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BetterSolution.cs" />
+    <Compile Include="Extensions\StringExtensions.cs" />
+    <Compile Include="Models\SourceFile.cs" />
     <Compile Include="Models\Resource.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
